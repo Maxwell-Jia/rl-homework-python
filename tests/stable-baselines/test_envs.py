@@ -15,6 +15,7 @@ from stable_baselines3.common.envs import (
     IdentityEnvMultiBinary,
     IdentityEnvMultiDiscrete,
     SimpleMultiObsEnv,
+    CartPoleV2Env,
 )
 
 ENV_CLASSES = [
@@ -25,6 +26,7 @@ ENV_CLASSES = [
     IdentityEnvMultiDiscrete,
     FakeImageEnv,
     SimpleMultiObsEnv,
+    CartPoleV2Env,
 ]
 
 
