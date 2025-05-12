@@ -29,7 +29,8 @@ else:
     np.float = np.float32  # type: ignore[attr-defined]
 
 try:
-    import custom_envs
+    from stable_baselines3.common.envs.cart_pole_v2_env import CartPoleV2Env
+    register("CartPole-v2", entry_point=CartPoleV2Env)
 except ImportError:
     pass
 
