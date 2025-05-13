@@ -2,7 +2,8 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import scipy.linalg  # For matrix inverse and expm
-import matplotlib.pyplot as plt # Add matplotlib for plotting
+# import matplotlib.pyplot as plt # Add matplotlib for plotting # REMOVED
+import pygame # ADDED
 
 # --- Constants ---
 MODEL_STATE_DIM = 8  # Dimension of the underlying physics model's state vector
@@ -57,7 +58,7 @@ class CartPoleV2Env(gym.Env):
     replicating the logic from the provided MATLAB script.
     Uses CartPole-style reward: +1 for every step not terminated.
     """
-    metadata = {"render_modes": ["human"], "render_fps": 50}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 50} # UPDATED
 
     def __init__(self, params=None, render_mode=None):
         super().__init__()
@@ -107,15 +108,48 @@ class CartPoleV2Env(gym.Env):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
 
-        # --- Plotting Attributes (if rendering) ---
-        self.plot_fig = None
-        self.plot_axs = None
-        self.plot_lines = None
-        self.state_history = []
-        self.step_history = []
+        # --- Pygame Rendering Attributes ---
+        self.screen = None
+        self.clock = None
+        self.isopen = True # For human mode window state
+        self._pygame_initialized = False # Track if pygame.init() has been called
 
-        if self.render_mode == "human":
-            self._setup_render_plot() # Initialize plot immediately
+        if self.render_mode in ["human", "rgb_array"]:
+            # Common visual parameters
+            self.screen_width = 800  # pixels
+            self.screen_height = 600 # pixels
+            # world_width_visible defines how many meters of cart travel are shown across screen_width
+            self.world_width_visible = 3.0 # meters
+            self.scale = self.screen_width / self.world_width_visible
+
+            # Visual properties (in pixels for direct rendering)
+            # self.cartwidth_px = 60 # REMOVED
+            # self.cartheight_px = 40 # REMOVED
+            # self.polewidth_px = 8 # REMOVED
+            # self.pole_render_length_px = 80 # REMOVED
+
+            self.wheel_radius_px = 15
+            self.body_pole_render_length_px = 80
+            self.body_pole_width_px = 12
+            self.pendulum_pole_render_length_px = 60
+            self.pendulum_pole_width_px = 8
+
+            if not pygame.get_init():
+                pygame.init()
+                self._pygame_initialized = True
+
+            if self.render_mode == "rgb_array":
+                # Create an offscreen surface for rgb_array rendering if not in human mode
+                # This surface is used if human mode isn't also active.
+                self._rgb_surface = pygame.Surface((self.screen_width, self.screen_height))
+        # Removed matplotlib plotting attributes and _setup_render_plot call
+        # self.plot_fig = None
+        # self.plot_axs = None
+        # self.plot_lines = None
+        # self.state_history = [] # REMOVED
+        # self.step_history = [] # REMOVED
+        # if self.render_mode == "human":
+        #    self._setup_render_plot() # REMOVED
 
     def _calculate_discrete_matrices(self):
         """Replicates the MATLAB calculation to get discrete G and H."""
@@ -249,48 +283,6 @@ class CartPoleV2Env(gym.Env):
 
             return float(reward)
 
-    def _setup_render_plot(self):
-        """Initializes the matplotlib figure and axes for rendering."""
-        if self.render_mode == "human":
-            plt.ion() # Turn on interactive mode
-            # self.plot_fig, self.plot_axs = plt.subplots(MODEL_STATE_DIM, 1, figsize=(8, 12), sharex=True)
-            # Let's plot the 6D observation state instead of the 8D internal state
-            # self.plot_fig, self.plot_axs = plt.subplots(OBSERVATION_DIM, 1, figsize=(8, 10), sharex=True)
-            self.plot_fig, self.plot_axs = plt.subplots(3, 2, figsize=(12, 8)) # Changed to 3 rows, 2 columns
-            self.plot_axs = self.plot_axs.flatten() # Flatten for easy iteration
-            self.plot_fig.suptitle('CartPoleV2 State History')
-
-            # Labels based on the 6D observation space definition
-            # obs_labels = [
-            #     "Wheel Angle (theta_w)",
-            #     "Body Angle (theta_1)",
-            #     "Pendulum Angle (theta_2)",
-            #     "Wheel Velocity (theta_w_dot)",
-            #     "Body Velocity (theta_1_dot)",
-            #     "Pendulum Velocity (theta_2_dot)"
-            # ]
-            obs_labels = [
-                "theta_w",
-                "theta_1",
-                "theta_2",
-                "theta_w_dot",
-                "theta_1_dot",
-                "theta_2_dot"
-            ]
-
-
-            self.plot_lines = []
-            for i, ax in enumerate(self.plot_axs):
-                 ax.set_ylabel(obs_labels[i])
-                 line, = ax.plot([], [], label=obs_labels[i])
-                 self.plot_lines.append(line)
-                 ax.grid(True)
-
-            self.plot_axs[-1].set_xlabel("Step")
-            self.plot_axs[-2].set_xlabel("Step") # Also set for the last plot in the second to last row
-            self.plot_fig.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to prevent title overlap
-            plt.show(block=False) # Show plot without blocking
-
     def reset(self, seed=None, options=None, initial_state=None):
         super().reset(seed=seed)
 
@@ -305,9 +297,14 @@ class CartPoleV2Env(gym.Env):
         else:
             # Initialize state near upright equilibrium, small random angles, zero velocities
             # Ensure theta_l = theta_r and theta_l_dot = theta_r_dot = 0
-            wheel_angle_init = np.float32(self.np_random.uniform(low=-0.1, high=0.1))
-            body_angle_init = np.float32(self.np_random.uniform(low=-0.05, high=0.05))
-            pendulum_angle_init = np.float32(self.np_random.uniform(low=-0.05, high=0.05))
+            # wheel_angle_init = np.float32(self.np_random.uniform(low=-0.1, high=0.1))
+            # body_angle_init = np.float32(self.np_random.uniform(low=-0.05, high=0.05))
+            # pendulum_angle_init = np.float32(self.np_random.uniform(low=-0.05, high=0.05))
+
+            # Increased initialization ranges for more challenging starts
+            wheel_angle_init = np.float32(self.np_random.uniform(low=-0.5, high=0.5))
+            body_angle_init = np.float32(self.np_random.uniform(low=-0.5, high=0.5))
+            pendulum_angle_init = np.float32(self.np_random.uniform(low=-0.5, high=0.5))
 
             initial_angles = np.array([
                 wheel_angle_init,    # theta_l
@@ -320,28 +317,22 @@ class CartPoleV2Env(gym.Env):
             initial_velocities = np.zeros(4, dtype=np.float32)
             self.state = np.concatenate([initial_angles, initial_velocities])
 
-        # Reset step counter and state history for plotting
+        # Reset step counter
         self.current_step = 0
-        self.state_history = []
-        self.step_history = []
+        # Removed state_history and step_history for plotting
+        # self.state_history = []
+        # self.step_history = []
 
-        # Reset plot lines if they exist
-        if self.render_mode == "human" and self.plot_lines:
-            for line in self.plot_lines:
-                line.set_data([], [])
-            for ax in self.plot_axs:
-                ax.relim()
-                ax.autoscale_view()
-            if self.plot_fig:
-                self.plot_fig.canvas.draw()
-                self.plot_fig.canvas.flush_events()
+        # Removed matplotlib plot reset logic
+        # if self.render_mode == "human" and self.plot_lines:
+        #    ...
 
         # Return initial observation and info
         observation = self._get_obs()
         info = self._get_info()
 
         if self.render_mode == "human":
-            self._render_frame()
+            self.render() # Render initial state for human mode
 
         return observation, info
 
@@ -387,52 +378,167 @@ class CartPoleV2Env(gym.Env):
         info = self._get_info()
 
         if self.render_mode == "human":
-            self._render_frame()
+            self.render() # Call new pygame render
 
         return observation, reward, terminated, truncated, info
 
     def render(self):
+        if self.render_mode is None:
+            gym.logger.warn(
+                "You are calling render method without specifying any render mode. "
+                "You can specify the render_mode at initialization, "
+                f'e.g. gym.make("{self.spec.id if self.spec else "UnknownEnv"}", render_mode="human")'
+            )
+            return
+
+        # Initialize Pygame screen/surface for drawing
+        draw_surface = None
+        current_screen_width = self.screen_width
+        current_screen_height = self.screen_height
+
         if self.render_mode == "human":
-            if self.plot_fig is None:
-                # Plot might have been closed, re-initialize
-                self._setup_render_plot()
-                #return # Avoid plotting on the very first call if setup happens here
+            if not self.isopen:  # Window was closed by user
+                return
 
-            if self.state is None:
-                 print("Warning: render called before reset or with invalid state.")
-                 return
+            if self.screen is None:  # Initialize display for human mode
+                if not pygame.get_init(): # Ensure pygame is initialized
+                    pygame.init()
+                    self._pygame_initialized = True
+                pygame.display.init() # Initialize display module specifically
+                self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+                pygame.display.set_caption("CartPoleV2")
+                if self.clock is None:
+                    self.clock = pygame.time.Clock()
+            draw_surface = self.screen
 
-            # Store current observation and step
-            current_obs = self._get_obs()
-            self.state_history.append(current_obs) # Store the 6D observation
-            self.step_history.append(self.current_step)
+            for event in pygame.event.get():  # Human mode handles events
+                if event.type == pygame.QUIT:
+                    pygame.display.quit()  # Quit display part
+                    self.isopen = False
+                    self.screen = None  # Mark as closed, allows re-opening
+                    # Note: pygame.quit() (full uninitialization) is handled in self.close()
+                    return
+        
+        elif self.render_mode == "rgb_array":
+            if self.screen is not None: # Human mode might be active, use its screen content
+                draw_surface = self.screen
+            else: # Human mode not active. Use the pre-initialized _rgb_surface.
+                if not hasattr(self, '_rgb_surface') or self._rgb_surface is None:
+                    # This case should ideally be covered by __init__ ensuring _rgb_surface exists
+                    if not pygame.get_init(): pygame.init(); self._pygame_initialized = True
+                    self._rgb_surface = pygame.Surface((self.screen_width, self.screen_height))
+                draw_surface = self._rgb_surface
+        
+        if draw_surface is None: # Should not happen if render_mode is valid
+            return
 
-            # Update plot data
-            history_array = np.array(self.state_history)
-            for i, line in enumerate(self.plot_lines):
-                line.set_data(self.step_history, history_array[:, i])
-                self.plot_axs[i].relim()
-                self.plot_axs[i].autoscale_view()
+        # --- Common Drawing Logic ---
+        # Colors
+        white = (255, 255, 255)
+        # cart_color = (150, 150, 150)  # Grey # REMOVED
+        # pole_color = (100, 50, 50)    # Brownish # REMOVED
+        track_color = (70, 70, 70)
+        wheel_color = (50, 50, 50)      # Dark grey for wheel
+        body_pole_color = (80, 130, 180) # Bluish for body
+        pendulum_pole_color = (180, 80, 80) # Reddish for pendulum
 
-            # Redraw the canvas
-            self.plot_fig.canvas.draw()
-            self.plot_fig.canvas.flush_events()
-            # plt.pause(0.001) # Small pause maybe needed on some systems
+        draw_surface.fill(white)
 
-            # Keep console output? Optional.
-            # print(f"Step: {self.current_step}, State: {np.round(self.state, 2)}")
+        if self.state is None: # If state is None (e.g. pre-reset), draw blank
+            if self.render_mode == "human" and self.screen: # Ensure screen exists for human mode
+                pygame.display.flip()
+                if self.clock: self.clock.tick(self.metadata["render_fps"])
+            elif self.render_mode == "rgb_array":
+                return np.transpose(pygame.surfarray.array3d(draw_surface), axes=(1, 0, 2))
+            return
 
-    def _render_frame(self):
-         # This method could potentially return the plot as an image array
-         # For now, render() handles the live plotting directly.
-         pass
+        # --- Calculate positions from self.state ---
+        # Cart's horizontal position in meters (from wheel angle)
+        # self.state[0] is theta_l (left wheel angle), self.params['r'] is wheel radius
+        cart_x_meters = self.state[0] * self.params['r']
+        
+        # Convert to screen coordinates for the wheel center
+        wheel_center_x_screen = cart_x_meters * self.scale + current_screen_width / 2.0
+        # Position wheel near the bottom, accounting for its radius
+        wheel_center_y_screen = current_screen_height * 0.85 - self.wheel_radius_px 
+
+        # Body pole angle (theta_1)
+        body_angle_rad = self.state[2]
+        # Pendulum pole angle (theta_2)
+        pendulum_angle_rad = self.state[3]
+
+        # --- Draw Track ---
+        track_y = wheel_center_y_screen + self.wheel_radius_px # Track below the wheel
+        pygame.draw.line(draw_surface, track_color, (0, int(track_y)), (current_screen_width, int(track_y)), 2)
+
+        # --- Draw Wheel (as a circle) ---
+        pygame.draw.circle(
+            draw_surface, 
+            wheel_color, 
+            (int(wheel_center_x_screen), int(wheel_center_y_screen)), 
+            self.wheel_radius_px
+        )
+
+        # --- Draw Body Pole (Pole 1) ---
+        # Starts from the center of the wheel
+        body_pole_bottom_x = wheel_center_x_screen
+        body_pole_bottom_y = wheel_center_y_screen
+
+        body_pole_top_x = body_pole_bottom_x + self.body_pole_render_length_px * np.sin(body_angle_rad)
+        body_pole_top_y = body_pole_bottom_y - self.body_pole_render_length_px * np.cos(body_angle_rad)
+
+        pygame.draw.line(
+            draw_surface,
+            body_pole_color,
+            (int(body_pole_bottom_x), int(body_pole_bottom_y)),
+            (int(body_pole_top_x), int(body_pole_top_y)),
+            self.body_pole_width_px
+        )
+
+        # --- Draw Pendulum Pole (Pole 2) ---
+        # Starts from the top of the body pole
+        pendulum_pole_bottom_x = body_pole_top_x
+        pendulum_pole_bottom_y = body_pole_top_y
+
+        pendulum_pole_top_x = pendulum_pole_bottom_x + self.pendulum_pole_render_length_px * np.sin(pendulum_angle_rad)
+        pendulum_pole_top_y = pendulum_pole_bottom_y - self.pendulum_pole_render_length_px * np.cos(pendulum_angle_rad)
+
+        pygame.draw.line(
+            draw_surface,
+            pendulum_pole_color,
+            (int(pendulum_pole_bottom_x), int(pendulum_pole_bottom_y)),
+            (int(pendulum_pole_top_x), int(pendulum_pole_top_y)),
+            self.pendulum_pole_width_px
+        )
+
+        if self.render_mode == "human":
+            if self.screen: # Ensure screen is still valid (e.g. not closed during event loop)
+                 pygame.display.flip()
+            if self.clock: self.clock.tick(self.metadata["render_fps"])
+            return # For human mode, returns None
+        
+        elif self.render_mode == "rgb_array":
+            # Pygame surfarray is W, H, C. SB3 expects H, W, C.
+            return np.transpose(pygame.surfarray.array3d(draw_surface), axes=(1, 0, 2))
+
+    # _render_frame method REMOVED (its role is now part of render())
 
     def close(self):
-        # Clean up resources if needed
-        if self.render_mode == "human" and self.plot_fig is not None:
-            plt.close(self.plot_fig)
-            self.plot_fig = None
-            self.plot_axs = None
-            self.plot_lines = None
-            plt.ioff() # Turn off interactive mode
-        # Any other cleanup if needed
+        # Clean up Pygame resources
+        if self.screen is not None: # If human mode display was initialized
+            pygame.display.quit()
+            self.screen = None
+        
+        # self._rgb_surface is a Surface, will be garbage collected.
+        # No specific close needed other than pygame.quit().
+
+        if self._pygame_initialized: # If pygame.init() was called by this env instance
+            pygame.quit()
+            self._pygame_initialized = False
+        
+        self.isopen = True # Reset for potential next use/re-initialization
+        if self.clock is not None:
+            self.clock = None
+        # Removed matplotlib cleanup logic
+        # if self.render_mode == "human" and self.plot_fig is not None:
+        #    ...
