@@ -13,7 +13,7 @@ ACTION_ENV_DIM = 1   # Dimension of the action vector received from the agent
 # MAX_ACTION was 1000.0, let's rename for clarity if it's common acceleration
 MAX_COMMON_WHEEL_ACCEL = 1000.0
 MAX_ENV_ACTION = 1.0  # For normalized action space for the agent
-MAX_EPISODE_STEPS = 500
+MAX_EPISODE_STEPS = 1000
 
 # Suggested bounds for state variables (can be tuned)
 MAX_WHEEL_VEL = 50.0  # rad/s
@@ -200,34 +200,44 @@ class CartPoleV2Env(gym.Env):
         return {}
 
     def _calculate_reward(self, prev_state_8d, model_action_2d, terminated):
-        """ Calculates CartPole-style reward. """
-        # Return +1 for every step taken *unless* it resulted in termination.
-        # Note: The check for termination happens *after* the step is taken based on the *next* state.
-        # Standard CartPole gives +1 even for the terminating step.
-        # Let's follow that: reward is +1 regardless of termination in this step.
-        # The value function learning handles the 0 future reward from terminal states.
-        body_angle = prev_state_8d[2]    # theta_1
-        pendulum_angle = prev_state_8d[3] # theta_2
-        body_velocity = prev_state_8d[6] # theta_1_dot
-        pendulum_velocity = prev_state_8d[7]# theta_2_dot
-        control_effort = model_action_2d[0] # u_common
+        """ Calculates reward to encourage stable balance and minimize oscillations.
+        -10 if terminated due to falling.
+        Otherwise, +1 alive_bonus minus penalties for angle/velocity deviations and control effort.
+        """
+        if terminated:
+            return -10.0
+        else:
+            alive_bonus = 1.0
 
-        # Define weights for each component (these will need tuning)
-        w_alive = 1.0
-        w_body_angle = -1.0   # Negative because it's a penalty
-        w_pendulum_angle = -2.0 # Might want to penalize pendulum deviation more
-        w_body_velocity = -0.1
-        w_pendulum_velocity = -0.1
-        w_control = -0.001
+            # Penalties are based on the current state (self.state) after the action
+            current_body_angle = self.state[2]        # theta_1 from state x[k+1]
+            current_pendulum_angle = self.state[3]    # theta_2 from state x[k+1]
+            current_body_velocity = self.state[6]     # theta_1_dot from state x[k+1]
+            current_pendulum_velocity = self.state[7] # theta_2_dot from state x[k+1]
 
-        reward = w_alive
-        reward += w_body_angle * body_angle**2
-        reward += w_pendulum_angle * pendulum_angle**2
-        reward += w_body_velocity * body_velocity**2
-        reward += w_pendulum_velocity * pendulum_velocity**2
-        reward += w_control * control_effort**2
+            # Control effort from the applied model action u[k]
+            # model_action_2d[0] is the common wheel acceleration, which can be up to MAX_COMMON_WHEEL_ACCEL (e.g., 1000.0)
+            control_effort_raw = model_action_2d[0]
 
-        return float(reward)
+            # --- Tunable weights for penalties ---
+            # You will likely need to adjust these weights based on experimentation.
+            w_body_angle = 0.2        # Penalty for body angle deviation
+            w_pendulum_angle = 0.2    # Penalty for pendulum angle deviation (often more critical)
+            w_body_velocity = 0.01     # Penalty for body angular velocity
+            w_pendulum_velocity = 0.01 # Penalty for pendulum angular velocity
+            # MAX_COMMON_WHEEL_ACCEL is 1000. So (control_effort_raw)^2 can be 1e6.
+            # This weight needs to be very small if penalizing raw acceleration.
+            w_control = 0.000001      # Penalty for large control actions (raw wheel acceleration)
+            # Consider normalizing control_effort if raw values are too large, or use a smaller weight.
+
+            reward = alive_bonus \
+                     - w_body_angle * current_body_angle**2 \
+                     - w_pendulum_angle * current_pendulum_angle**2 \
+                     - w_body_velocity * current_body_velocity**2 \
+                     - w_pendulum_velocity * current_pendulum_velocity**2 \
+                     - w_control * control_effort_raw**2
+
+            return float(reward)
 
     def reset(self, seed=None, options=None, initial_state=None):
         super().reset(seed=seed)

@@ -16,6 +16,7 @@ dependencies = [
     "pandas",
     "matplotlib",
     "huggingface_sb3>=3.0,<4.0",
+    "sb3-contrib>=2.6.0,<2.7.0",
     "tqdm",
     "rich",
     "optuna>=3.0",
@@ -23,6 +24,7 @@ dependencies = [
     "pytablewriter~=1.2",
     "shimmy~=2.0",
     "ale-py>=0.11.0",
+    "scipy",
 ]
 
 [project.optional-dependencies]
