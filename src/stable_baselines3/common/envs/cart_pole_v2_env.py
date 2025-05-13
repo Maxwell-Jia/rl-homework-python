@@ -107,6 +107,16 @@ class CartPoleV2Env(gym.Env):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
 
+        # --- Plotting Attributes (if rendering) ---
+        self.plot_fig = None
+        self.plot_axs = None
+        self.plot_lines = None
+        self.state_history = []
+        self.step_history = []
+
+        if self.render_mode == "human":
+            self._setup_render_plot() # Initialize plot immediately
+
     def _calculate_discrete_matrices(self):
         """Replicates the MATLAB calculation to get discrete G and H."""
         m_1, m_2 = self.params['m_1'], self.params['m_2']
@@ -239,6 +249,36 @@ class CartPoleV2Env(gym.Env):
 
             return float(reward)
 
+    def _setup_render_plot(self):
+        """Initializes the matplotlib figure and axes for rendering."""
+        if self.render_mode == "human":
+            plt.ion() # Turn on interactive mode
+            # self.plot_fig, self.plot_axs = plt.subplots(MODEL_STATE_DIM, 1, figsize=(8, 12), sharex=True)
+            # Let's plot the 6D observation state instead of the 8D internal state
+            self.plot_fig, self.plot_axs = plt.subplots(OBSERVATION_DIM, 1, figsize=(8, 10), sharex=True)
+            self.plot_fig.suptitle('CartPoleV2 State History')
+
+            # Labels based on the 6D observation space definition
+            obs_labels = [
+                "Wheel Angle (theta_w)",
+                "Body Angle (theta_1)",
+                "Pendulum Angle (theta_2)",
+                "Wheel Velocity (theta_w_dot)",
+                "Body Velocity (theta_1_dot)",
+                "Pendulum Velocity (theta_2_dot)"
+            ]
+
+            self.plot_lines = []
+            for i, ax in enumerate(self.plot_axs):
+                 ax.set_ylabel(obs_labels[i])
+                 line, = ax.plot([], [], label=obs_labels[i])
+                 self.plot_lines.append(line)
+                 ax.grid(True)
+
+            self.plot_axs[-1].set_xlabel("Step")
+            self.plot_fig.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to prevent title overlap
+            plt.show(block=False) # Show plot without blocking
+
     def reset(self, seed=None, options=None, initial_state=None):
         super().reset(seed=seed)
 
@@ -268,7 +308,23 @@ class CartPoleV2Env(gym.Env):
             initial_velocities = np.zeros(4, dtype=np.float32)
             self.state = np.concatenate([initial_angles, initial_velocities])
 
+        # Reset step counter and state history for plotting
         self.current_step = 0
+        self.state_history = []
+        self.step_history = []
+
+        # Reset plot lines if they exist
+        if self.render_mode == "human" and self.plot_lines:
+            for line in self.plot_lines:
+                line.set_data([], [])
+            for ax in self.plot_axs:
+                ax.relim()
+                ax.autoscale_view()
+            if self.plot_fig:
+                self.plot_fig.canvas.draw()
+                self.plot_fig.canvas.flush_events()
+
+        # Return initial observation and info
         observation = self._get_obs()
         info = self._get_info()
 
@@ -325,13 +381,46 @@ class CartPoleV2Env(gym.Env):
 
     def render(self):
         if self.render_mode == "human":
-             print(f"Step: {self.current_step}, State: {np.round(self.state, 2)}")
-             # Future: Add graphical rendering (matplotlib animation, pygame, etc.)
+            if self.plot_fig is None:
+                # Plot might have been closed, re-initialize
+                self._setup_render_plot()
+                #return # Avoid plotting on the very first call if setup happens here
+
+            if self.state is None:
+                 print("Warning: render called before reset or with invalid state.")
+                 return
+
+            # Store current observation and step
+            current_obs = self._get_obs()
+            self.state_history.append(current_obs) # Store the 6D observation
+            self.step_history.append(self.current_step)
+
+            # Update plot data
+            history_array = np.array(self.state_history)
+            for i, line in enumerate(self.plot_lines):
+                line.set_data(self.step_history, history_array[:, i])
+                self.plot_axs[i].relim()
+                self.plot_axs[i].autoscale_view()
+
+            # Redraw the canvas
+            self.plot_fig.canvas.draw()
+            self.plot_fig.canvas.flush_events()
+            # plt.pause(0.001) # Small pause maybe needed on some systems
+
+            # Keep console output? Optional.
+            # print(f"Step: {self.current_step}, State: {np.round(self.state, 2)}")
 
     def _render_frame(self):
-         # Placeholder for rendering logic
+         # This method could potentially return the plot as an image array
+         # For now, render() handles the live plotting directly.
          pass
 
     def close(self):
         # Clean up resources if needed
-        pass
+        if self.render_mode == "human" and self.plot_fig is not None:
+            plt.close(self.plot_fig)
+            self.plot_fig = None
+            self.plot_axs = None
+            self.plot_lines = None
+            plt.ioff() # Turn off interactive mode
+        # Any other cleanup if needed
