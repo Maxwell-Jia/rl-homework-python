@@ -255,18 +255,29 @@ class CartPoleV2Env(gym.Env):
             plt.ion() # Turn on interactive mode
             # self.plot_fig, self.plot_axs = plt.subplots(MODEL_STATE_DIM, 1, figsize=(8, 12), sharex=True)
             # Let's plot the 6D observation state instead of the 8D internal state
-            self.plot_fig, self.plot_axs = plt.subplots(OBSERVATION_DIM, 1, figsize=(8, 10), sharex=True)
+            # self.plot_fig, self.plot_axs = plt.subplots(OBSERVATION_DIM, 1, figsize=(8, 10), sharex=True)
+            self.plot_fig, self.plot_axs = plt.subplots(3, 2, figsize=(12, 8)) # Changed to 3 rows, 2 columns
+            self.plot_axs = self.plot_axs.flatten() # Flatten for easy iteration
             self.plot_fig.suptitle('CartPoleV2 State History')
 
             # Labels based on the 6D observation space definition
+            # obs_labels = [
+            #     "Wheel Angle (theta_w)",
+            #     "Body Angle (theta_1)",
+            #     "Pendulum Angle (theta_2)",
+            #     "Wheel Velocity (theta_w_dot)",
+            #     "Body Velocity (theta_1_dot)",
+            #     "Pendulum Velocity (theta_2_dot)"
+            # ]
             obs_labels = [
-                "Wheel Angle (theta_w)",
-                "Body Angle (theta_1)",
-                "Pendulum Angle (theta_2)",
-                "Wheel Velocity (theta_w_dot)",
-                "Body Velocity (theta_1_dot)",
-                "Pendulum Velocity (theta_2_dot)"
+                "theta_w",
+                "theta_1",
+                "theta_2",
+                "theta_w_dot",
+                "theta_1_dot",
+                "theta_2_dot"
             ]
+
 
             self.plot_lines = []
             for i, ax in enumerate(self.plot_axs):
@@ -276,6 +287,7 @@ class CartPoleV2Env(gym.Env):
                  ax.grid(True)
 
             self.plot_axs[-1].set_xlabel("Step")
+            self.plot_axs[-2].set_xlabel("Step") # Also set for the last plot in the second to last row
             self.plot_fig.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to prevent title overlap
             plt.show(block=False) # Show plot without blocking
 
