@@ -273,13 +273,18 @@ class CartPoleV2Env(gym.Env):
             # This weight needs to be very small if penalizing raw acceleration.
             w_control = 0.000001      # Penalty for large control actions (raw wheel acceleration)
             # Consider normalizing control_effort if raw values are too large, or use a smaller weight.
+            w_wheel_angle = 0.01     # Penalty for wheel angle deviation from zero
+
+            # Current wheel angle (theta_l, used as common wheel angle)
+            current_wheel_angle = self.state[0]
 
             reward = alive_bonus \
                      - w_body_angle * current_body_angle**2 \
                      - w_pendulum_angle * current_pendulum_angle**2 \
                      - w_body_velocity * current_body_velocity**2 \
                      - w_pendulum_velocity * current_pendulum_velocity**2 \
-                     - w_control * control_effort_raw**2
+                     - w_control * control_effort_raw**2 \
+                     - w_wheel_angle * current_wheel_angle**2 # Added wheel angle penalty
 
             return float(reward)
 
@@ -302,9 +307,10 @@ class CartPoleV2Env(gym.Env):
             # pendulum_angle_init = np.float32(self.np_random.uniform(low=-0.05, high=0.05))
 
             # Increased initialization ranges for more challenging starts
-            wheel_angle_init = np.float32(self.np_random.uniform(low=-0.5, high=0.5))
-            body_angle_init = np.float32(self.np_random.uniform(low=-0.5, high=0.5))
-            pendulum_angle_init = np.float32(self.np_random.uniform(low=-0.5, high=0.5))
+            # wheel_angle_init = np.float32(self.np_random.uniform(low=-0.5, high=0.5))
+            wheel_angle_init = 0.0
+            body_angle_init = np.float32(self.np_random.uniform(low=-0.3, high=0.3))
+            pendulum_angle_init = np.float32(self.np_random.uniform(low=-0.3, high=0.3))
 
             initial_angles = np.array([
                 wheel_angle_init,    # theta_l
